@@ -60,5 +60,10 @@ int main(int argc, char** argv) {
 	}
 
 	printf("Resultado final: %lu\n", *(args->number));
+
+	free(args->number);
+	free(args->increments);
+	free(args);
+	
 	return 0;
 }
