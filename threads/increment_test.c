@@ -40,8 +40,12 @@ int main(int argc, char** argv) {
 	args->number = (uint64_t*)malloc(sizeof(uint64_t));
 	args->increments = (uint64_t*)malloc(sizeof(uint64_t));
 
-	int num_threads = atoi(argv[2]);
-	*(args->increments) = strtoull(argv[1], NULL, 10);
+	int num_threads = strtoull(argv[2], NULL, 10);
+	if(strtoull(argv[1], NULL, 10) % num_threads != 0){
+		printf("Erro: Numero de incrementos indivisível\n");
+		return 0;
+	}
+	*(args->increments) = strtoull(argv[1], NULL, 10) / num_threads;
 
 	pthread_t thread[num_threads];
 
