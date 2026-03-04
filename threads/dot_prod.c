@@ -1,143 +1,123 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <time.h>
 
-// Estrutura para passar dados para cada thread
-typedef struct {
-    int* vetor_a;      // Primeiro vetor
-    int* vetor_b;      // Segundo vetor
-    int start;         // Índice inicial
-    int end;           // Índice final
-    long long resultado_parcial;  // Resultado calculado por esta thread
-} ThreadData;
+typedef struct args{
+	float* part_a;
+	float* part_b;
+	int size;
+	float* dot_prod;
+}Args;
 
-// Função executada por cada thread
-void* calcular_produto_parcial(void* arg) {
-    ThreadData* data = (ThreadData*)arg;
-    data->resultado_parcial = 0;
-    
-    // Calcula o produto interno para a porção atribuída
-    for (int i = data->start; i < data->end; i++) {
-        data->resultado_parcial += (long long)data->vetor_a[i] * data->vetor_b[i];
-    }
-    
-    return NULL;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+float dot_prod_seq(float* a, float* b, int size){
+	float dot_prod = 0;
+	for(size_t i = 0; i < size; i++){
+		dot_prod += a[i] * b[i];
+	}
+	return dot_prod;
 }
 
-int main(int argc, char* argv[]) {
-    // Verifica se os argumentos foram fornecidos
-    if (argc != 3) {
-        printf("Uso: %s <numero_threads> <tamanho_vetor>\n", argv[0]);
-        printf("Exemplo: %s 4 10000000\n", argv[0]);
-        return 1;
+void* dot_prod_thread(void* args){
+	Args* a = (Args*)args;
+	float local = 0.0f;
+
+	for(size_t i = 0; i < a->size; i++){
+		local += a->part_a[i] * a->part_b[i]; 
+	}
+	pthread_mutex_lock(&mutex);
+	*a->dot_prod += local;
+	pthread_mutex_unlock(&mutex);
+
+	return NULL;
+}
+
+float* partition(float* vec, int start, int end){
+	float* part = (float*)malloc((end - start) * sizeof(float));
+	if(!part) return NULL;
+
+	for(size_t i = 0; i < end - start; i++){
+		part[i] = vec[i + start]; 
+	}
+	return part;
+}
+
+float** partitions(float* vec, int num_parts, int max_size){
+	float** parts = (float**)malloc(num_parts * sizeof(float*));
+	if(!parts) return NULL;
+	
+	for(size_t i = 0; i < num_parts; i++){
+		parts[i] = partition(vec, i * (max_size/num_parts), (i+1) * (max_size/num_parts));
+	}
+	return parts;
+}
+
+
+int main(int argc, char** argv){
+	if(argc != 3) return 1;
+	int num_threads = atoi(argv[1]);
+	int max_size = atoi(argv[2]);
+
+    while(max_size % num_threads != 0){
+        max_size++;
     }
-    
-    // Lê os argumentos
-    int num_threads = atoi(argv[1]);
-    int tamanho = atoi(argv[2]);
-    
-    // Valida os argumentos
-    if (num_threads <= 0) {
-        printf("Erro: número de threads deve ser maior que 0\n");
-        return 1;
-    }
-    
-    if (tamanho <= 0) {
-        printf("Erro: tamanho do vetor deve ser maior que 0\n");
-        return 1;
-    }
-    
-    if (num_threads > tamanho) {
-        printf("Aviso: número de threads (%d) maior que tamanho (%d)\n", 
-               num_threads, tamanho);
-        printf("Ajustando para %d threads\n", tamanho);
-        num_threads = tamanho;
-    }
-    
-    // Aloca memória para os vetores
-    int* vetor_a = (int*)malloc(tamanho * sizeof(int));
-    int* vetor_b = (int*)malloc(tamanho * sizeof(int));
-    
-    if (!vetor_a || !vetor_b) {
-        printf("Erro ao alocar memória!\n");
-        free(vetor_a);
-        free(vetor_b);
-        return 1;
-    }
-    
-    // Inicializa os vetores com valores aleatórios
-    srand(time(NULL));
-    for (int i = 0; i < tamanho; i++) {
-        vetor_a[i] = rand() % 100;
-        vetor_b[i] = rand() % 100;
-    }
-    
-    // Prepara as threads
-    pthread_t* threads = (pthread_t*)malloc(num_threads * sizeof(pthread_t));
-    ThreadData* thread_data = (ThreadData*)malloc(num_threads * sizeof(ThreadData));
-    
-    if (!threads || !thread_data) {
-        printf("Erro ao alocar memória para threads!\n");
-        free(vetor_a);
-        free(vetor_b);
-        free(threads);
-        free(thread_data);
-        return 1;
-    }
-    
-    int elementos_por_thread = tamanho / num_threads;
-    
-    printf("=================================================\n");
-    printf("Cálculo de Produto Interno com Threads\n");
-    printf("=================================================\n");
-    printf("Tamanho dos vetores: %d elementos\n", tamanho);
+
+    printf("Tamanho do vetor: %d\n", max_size);
     printf("Número de threads: %d\n", num_threads);
-    printf("Elementos por thread: ~%d\n", elementos_por_thread);
-    printf("=================================================\n");
-    
+
+	srand(time(NULL));
+	
+	Args* args = (Args*)malloc(num_threads * sizeof(Args));
+	if(!args) return 1;
+	float* vec_a = (float*)malloc(max_size * sizeof(float));
+	float* vec_b = (float*)malloc(max_size * sizeof(float));
+	if(!vec_a || !vec_b) return 1;
+
     clock_t inicio = clock();
-    
-    // Cria as threads
-    for (int i = 0; i < num_threads; i++) {
-        thread_data[i].vetor_a = vetor_a;
-        thread_data[i].vetor_b = vetor_b;
-        thread_data[i].start = i * elementos_por_thread;
-        
-        // Última thread pega os elementos restantes
-        if (i == num_threads - 1) {
-            thread_data[i].end = tamanho;
-        } else {
-            thread_data[i].end = (i + 1) * elementos_por_thread;
-        }
-        
-        pthread_create(&threads[i], NULL, calcular_produto_parcial, &thread_data[i]);
-    }
-    
-    // Aguarda todas as threads terminarem e soma os resultados
-    long long produto_interno = 0;
-    for (int i = 0; i < num_threads; i++) {
-        pthread_join(threads[i], NULL);
-        produto_interno += thread_data[i].resultado_parcial;
-        printf("Thread %d processou elementos [%d - %d): %lld\n", 
-               i, thread_data[i].start, thread_data[i].end, 
-               thread_data[i].resultado_parcial);
-    }
-    
+
+	pthread_t threads[num_threads];
+	pthread_mutex_init(&mutex, NULL);
+	
+	for(size_t i = 0; i < max_size; i++){
+		unsigned int seed = time(NULL) ^ i;
+		vec_a[i] = 10 * ((float)rand_r(&seed) / RAND_MAX);
+		vec_b[i] = 10 * ((float)rand_r(&seed) / RAND_MAX);	
+	}
+
+	float** parts_a = partitions(vec_a, num_threads, max_size);
+	float** parts_b = partitions(vec_b, num_threads, max_size);
+	float dot = 0.0f;
+
+	for(size_t i = 0; i < num_threads; i++){
+		args[i].part_a = parts_a[i];
+		args[i].part_b = parts_b[i];
+		args[i].size = max_size/ num_threads;
+		args[i].dot_prod = &dot;
+
+		pthread_create(&threads[i], NULL, dot_prod_thread, &args[i]);
+	}
+
+	for(size_t i = 0; i < num_threads; i++){
+		pthread_join(threads[i], NULL);
+	}
+
     clock_t fim = clock();
-    double tempo = (double)(fim - inicio) / CLOCKS_PER_SEC;
-    
-    // Exibe resultados
-    printf("=================================================\n");
-    printf("Resultado do produto interno: %lld\n", produto_interno);
-    printf("Tempo de execução: %.6f segundos\n", tempo);
-    printf("=================================================\n");
-    
-    // Libera memória
-    free(vetor_a);
-    free(vetor_b);
-    free(threads);
-    free(thread_data);
-    
-    return 0;
+    float time = ((float)(fim - inicio)) / CLOCKS_PER_SEC;
+
+	printf("Resultado: %.6f\n", dot);
+    printf("Tempo de execução: %.6f\n", time);
+
+	for(size_t i = 0; i < num_threads; i++){
+		free(parts_a[i]);
+		free(parts_b[i]);
+	}
+    free(parts_a);
+    free(parts_b);
+	free(vec_a);
+	free(vec_b);
+	free(args);
+
+	return 0;
 }
