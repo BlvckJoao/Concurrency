@@ -24,7 +24,7 @@ Matrix* create_matrix(size_t m, size_t n) {
 	
 	Matrix* matrix = (Matrix*)malloc(sizeof(Matrix));
 
-	matrix->values = (float**)malloc(m * sizeof(float));
+	matrix->values = (float**)malloc(m * sizeof(float*));
 	if(matrix->values == NULL) return NULL;
 	for(size_t i = 0; i < m; i++){
 		matrix->values[i] = (float*)malloc(n * sizeof(float));
@@ -137,7 +137,6 @@ void* matrix_mul_worker(void* arg){
 	MatrixMulArgs* args = (MatrixMulArgs*)arg;
 	Matrix* a = args->a;
 	Matrix* b = args->b;
-	Matrix* bt = matrix_transpose(b);
 	Matrix* c = args->c;
 	size_t row_start = args->row_start;
 	size_t row_end = args->row_end;
@@ -145,7 +144,7 @@ void* matrix_mul_worker(void* arg){
 	for(size_t i = row_start; i < row_end; i++){
 		for(size_t j = 0; j < b->n; j++){
 			for(size_t k = 0; k < a->n; k++){
-				c->values[i][j] += a->values[i][k] * bt->values[j][k];
+				c->values[i][j] += a->values[i][k] * b->values[j][k];
 			}
 		}
 	}
@@ -159,22 +158,36 @@ int main() {
 	MatrixMulArgs args[NUM_THREADS];
 	struct timespec t0, t1;
 
-	clock_gettime(CLOCK_MONOTONIC, &t0);
-
 	Matrix* a = create_matrix(DIMENSION, DIMENSION);
 	Matrix* b = create_matrix(DIMENSION, DIMENSION);
 	Matrix* c = create_matrix(DIMENSION, DIMENSION);
+	Matrix* t = matrix_transpose(b);
 
 	initialize_matrix(a, 0);
 	initialize_matrix(b, 0);
 	initialize_matrix(c, 1);
 
+	printf("=============TESTE DE MULTIPLICAÇÃO DE MATRIZES=============\n\n");
+	printf("Matrizes de dimensão %dx%d\n", DIMENSION, DIMENSION);
+	printf("Operação de multiplicação Sequencial vs Paralelo\n\n");
+
+	//teste sequencial
+	clock_gettime(CLOCK_MONOTONIC, &t0);
+	Matrix* rst = matrix_mul(a, b);
+	clock_gettime(CLOCK_MONOTONIC, &t1);
+	double time_seq = (((t1.tv_sec - t0.tv_sec) * 1000) + ((t1.tv_nsec - t0.tv_nsec) / 1000000));
+	printf("Tempo sequencial: %f ms\n", time_seq);
+
+	//teste paralelo
+
+	clock_gettime(CLOCK_MONOTONIC, &t0);
+
 	for(size_t i = 0; i < NUM_THREADS; i++){
 		args[i].a = a;
-		args[i].b = b;
+		args[i].b = t;
 		args[i].c = c;
 		args[i].row_start = i * (DIMENSION/NUM_THREADS);
-		args[i].row_start = (i + 1) * (DIMENSION/NUM_THREADS);
+		args[i].row_end = (i + 1) * (DIMENSION/NUM_THREADS);
 		pthread_create(&threads[i], NULL, matrix_mul_worker, (void*)&args[i]);
 	}
 
@@ -184,9 +197,14 @@ int main() {
 
 	clock_gettime(CLOCK_MONOTONIC, &t1);
 
-	double time = (((t1.tv_sec - t0.tv_sec) * 1000) + ((t1.tv_nsec - t0.tv_nsec) / 1000000));
+	double time_par = (((t1.tv_sec - t0.tv_sec) * 1000) + ((t1.tv_nsec - t0.tv_nsec) / 1000000));
 	
-	printf("%f\n", time);
+	printf("Tempo de execução paralela: %f ms\n", time_par);
+
+	free_matrix(&a);
+	free_matrix(&b);
+	free_matrix(&c);
+	free_matrix(&t);
 
 	return 0;
 }
