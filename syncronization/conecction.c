@@ -5,7 +5,7 @@
 #include <time.h>
 #include <stdatomic.h>
 
-#define NUM_CONECTIONS 2
+#define MAX_CONECTIONS 2
 #define NUM_THREADS 5
 
 atomic_int conections_in_use = 0;
@@ -16,18 +16,22 @@ void* client(void* arg) {
 
 	printf("[Cliente ID: %d] Esperando conexão...\n", id);
 	
-	while(conections_in_use < NUM_CONECTIONS){
+	while(1){
 
 		pthread_mutex_lock(&lock);
-		atomic_fetch_add(&conections_in_use, 1);
-		printf("[Cliente ID: %d] Usando conexão (%d/%d em uso)\n"
-			, id, conections_in_use, NUM_CONECTIONS);
-		usleep(100000);
-		pthread_mutex_unlock(&lock);
 
-		printf("[Cliente ID: %d] Conexao finalizada\n", id);
-		atomic_fetch_sub(&conections_in_use, 1);
-		break;
+		if(conections_in_use < MAX_CONECTIONS){
+			atomic_fetch_add(&conections_in_use, 1);
+			printf("[Cliente ID: %d] Usando conexão (%d/%d em uso)\n"
+				, id, conections_in_use, MAX_CONECTIONS);
+			usleep(100000);
+
+			printf("[Cliente ID: %d] Conexao finalizada\n", id);
+			atomic_fetch_sub(&conections_in_use, 1);
+			pthread_mutex_unlock(&lock);
+			break;
+		}
+		pthread_mutex_unlock(&lock);
 	}
 
 	return NULL;
