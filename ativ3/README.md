@@ -8,6 +8,31 @@ Data: 26/03/2026
 
 ---
 
+## 0- Estrutura do Projeto e Compilação
+
+O projeto foi organizado da seguinte forma:
+
+```
+ativ3/
+├── include/
+│   └── restaurant/
+│       ├── queue.h
+│       └── restaurante.h
+├── src/
+│   ├── queue.c
+│   └── restaurante.c
+├── README.md
+└── restaurante.exe
+```
+
+Para compilar, basta executar na raiz do projeto:
+
+```bash
+gcc src/*.c -Iinclude -o restaurante -lpthread
+```
+
+O flag `-Iinclude` garante que o compilador encontre os headers em `include/restaurant/`, e `-lpthread` linka a biblioteca POSIX de threads necessária para `pthread_*` e `sem_*`.
+
 ## 1 Identificação
 
 **Nome:** João Pedro Pereira Maranhão
